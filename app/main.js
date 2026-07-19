@@ -193,10 +193,10 @@ function trustedMediaOrigins() {
     try { return new URL(origin).origin; } catch (e) { return null; }
   }).filter(Boolean);
 }
-function isLocalChatUrl(value) {
+function isLocalAppUrl(value) {
   try {
     const url = new URL(value);
-    return url.protocol === 'http:' && url.hostname === '127.0.0.1' && Number(url.port) === serverPort && url.pathname === '/chat';
+    return url.protocol === 'http:' && url.hostname === '127.0.0.1' && Number(url.port) === serverPort;
   } catch (e) {
     return false;
   }
@@ -204,7 +204,7 @@ function isLocalChatUrl(value) {
 function isTrustedMediaRequest(wc, details) {
   const requestingUrl = (details && (details.requestingUrl || details.securityOrigin)) || (wc && wc.getURL && wc.getURL()) || '';
   if (details && Array.isArray(details.mediaTypes) && !details.mediaTypes.includes('audio')) return false;
-  if (isLocalChatUrl(requestingUrl)) return true;
+  if (isLocalAppUrl(requestingUrl)) return true;
   try { return trustedMediaOrigins().includes(new URL(requestingUrl).origin); }
   catch (e) { return false; }
 }
