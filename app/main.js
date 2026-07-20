@@ -2,6 +2,17 @@
 // open-quake launcher: multi-grid panel + PC config editor. Talks to either the DK-QUAKE /
 // ARIS-68 panel (via Aris68Connector) or the open Bedrock RP2040 knob (via BedrockConnector),
 // routed through MultiKnob which picks whichever device is plugged in.
+
+// Node bundles its own CA list (Mozilla's) and never consults the OS trust store — so on a
+// corporate network doing TLS inspection (a re-signed cert chained to a private root the OS
+// already trusts), plain Node/`ws` connections (the HA client below) fail with "unable to get
+// local issuer certificate" even though the same cert is trusted fine in Chromium-rendered
+// pages. win-ca injects whatever Windows already trusts into Node's global TLS trust at
+// startup — do this before any module below can open a connection. macOS/Linux untouched
+// (Node's default CA list is normally sufficient there); failure here is non-fatal — connections
+// just fall back to Node's default behavior, matching how they worked before this existed.
+if (process.platform === 'win32') { try { require('win-ca'); } catch (e) { console.log('win-ca load failed:', e.message); } }
+
 const { app, BrowserWindow, Tray, Menu, nativeImage, screen, powerSaveBlocker, ipcMain, shell, dialog, session, net, safeStorage, clipboard, globalShortcut, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');

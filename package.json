@@ -28,6 +28,7 @@
     "@jitsi/robotjs": "^0.6.22",
     "node-hid": "^3.3.0",
     "systeminformation": "^5.31.7",
+    "win-ca": "^3.5.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -50,14 +51,16 @@
       "!build-smtc.js",
       "!sign.js",
       "!afterpack.js",
-      "!.signing/**"
+      "!.signing/**",
+      "!node_modules/win-ca/pem/**"
     ],
     "npmRebuild": false,
     "afterPack": "./afterpack.js",
     "asarUnpack": [
       "apps/**/*",
       "app/native/**",
-      "**/*.node"
+      "**/*.node",
+      "node_modules/win-ca/**"
     ],
     "win": {
       "target": [
