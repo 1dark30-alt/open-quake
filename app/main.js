@@ -11,7 +11,19 @@
 // startup — do this before any module below can open a connection. macOS/Linux untouched
 // (Node's default CA list is normally sufficient there); failure here is non-fatal — connections
 // just fall back to Node's default behavior, matching how they worked before this existed.
-if (process.platform === 'win32') { try { require('win-ca'); } catch (e) { console.log('win-ca load failed:', e.message); } }
+//
+// MUST use inject:'+' (not the bare `require('win-ca')` auto-run, which defaults to inject:true).
+// inject:true only sets https.globalAgent.options.ca — it covers plain `https` calls but NOT the
+// `ws` library's WebSocket connections, which build their own TLS socket via tls.createSecureContext
+// directly. inject:'+' patches tls.createSecureContext itself, so it's picked up by every TLS
+// connection regardless of which higher-level module opened it. fallback:true skips the native
+// N-API cert reader in favor of shelling out — consistent with this app's existing preference for
+// PowerShell-backed helpers (dpapi.js, desktopFocus.js) over native binaries, which corporate EDR
+// products are more prone to flag.
+if (process.platform === 'win32') {
+  try { require('win-ca/api')({ inject: '+', fallback: true }); }
+  catch (e) { console.log('win-ca load failed:', e.message); }
+}
 
 const { app, BrowserWindow, Tray, Menu, nativeImage, screen, powerSaveBlocker, ipcMain, shell, dialog, session, net, safeStorage, clipboard, globalShortcut, nativeTheme } = require('electron');
 const path = require('path');
