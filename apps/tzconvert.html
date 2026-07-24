@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=480">
+<title>Time Zone Converter</title>
+<style>
+  :root { --bg:#05080d; --fg:#e8f0f6; --label:#8aa6b4; --face:#0d1722; --tick:#3a4a5a; --accent:#2bff88; }
+  body.light { --bg:#eef3f8; --fg:#16242f; --label:#5a6c7e; --face:#ffffff; --tick:#b9c6d2; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--bg);
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif; }
+  #grid { width:100vw; height:100vh; display:grid; grid-template-columns:repeat(4,1fr); }
+  .cell { display:flex; flex-direction:column; align-items:center; justify-content:center;
+    position:relative; padding:0 12px; min-width:0; gap:2.4vh; }
+  .cell::after { content:''; position:absolute; right:0; top:18%; height:64%; width:1px;
+    background:linear-gradient(transparent, color-mix(in srgb, var(--fg) 16%, transparent), transparent); }
+  .cell.edge::after { display:none; }
+  .abbrs { color:var(--label); font-weight:600; letter-spacing:.12em; white-space:nowrap;
+    font-size:min(9vh, 2.2vw); }
+  .abbrs .on { color:var(--fg); font-weight:800; }
+  .time { width:100%; text-align:center; color:var(--accent); font-weight:700;
+    font-size:min(21vh, 4.4vw); line-height:1.1; letter-spacing:.02em;
+    font-variant-numeric:tabular-nums; white-space:nowrap;
+    background:none; border:none; outline:none; border-radius:.18em;
+    font-family:inherit; caret-color:var(--fg);
+    text-shadow:0 0 .26em color-mix(in srgb, var(--accent) 55%, transparent); }
+  .cell.active .time { background:color-mix(in srgb, var(--accent) 9%, transparent);
+    box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .time.bad { color:#ff5a5a; text-shadow:0 0 .26em color-mix(in srgb, #ff5a5a 55%, transparent); }
+  .steps { display:flex; gap:1.6vh; visibility:hidden; }
+  .cell.active .steps { visibility:visible; }
+  .steps button { min-width:11vh; min-height:10vh; padding:.6vh 1.6vh;
+    font:inherit; font-size:min(6.5vh, 1.5vw); font-weight:700; color:var(--fg);
+    background:color-mix(in srgb, var(--fg) 8%, transparent);
+    border:1px solid color-mix(in srgb, var(--fg) 22%, transparent);
+    border-radius:1.8vh; cursor:pointer; touch-action:manipulation; user-select:none;
+    font-variant-numeric:tabular-nums; }
+  .steps button:active { background:color-mix(in srgb, var(--accent) 22%, transparent);
+    border-color:color-mix(in srgb, var(--accent) 55%, transparent); }
+</style>
+</head>
+<body>
+<div id="grid"></div>
+<script>
+  'use strict';
+  function readOpts() {
+    const o = {};
+    (location.hash.slice(1) || '').split('&').forEach(kv => {
+      const i = kv.indexOf('='); if (i < 0) return;
+      o[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' '));
+    });
+    return o;
+  }
+  const ACCENT_NAMES = { green:'#2bff88', red:'#ff4040', amber:'#ffb000', blue:'#38b6ff', white:'#eef4ff' };
+  const ZONES = [
+    { tz: 'US/Pacific',  dt: 'PDT', st: 'PST' },
+    { tz: 'US/Mountain', dt: 'MDT', st: 'MST' },
+    { tz: 'US/Central',  dt: 'CDT', st: 'CST' },
+    { tz: 'US/Eastern',  dt: 'EDT', st: 'EST' }
+  ];
+  const grid = document.getElementById('grid');
+  const mod = m => ((m % 1440) + 1440) % 1440;
+
+  // ---- zone offsets (DST-correct via Intl; zones' relative gaps come from today's real offsets) ----
+  function zoneOffsetMin(tz, date) {
+    try {
+      const p = {};
+      new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit',
+        day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        .formatToParts(date).forEach(x => { if (x.type !== 'literal') p[x.type] = parseInt(x.value, 10); });
+      return Math.round((Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - date.getTime()) / 60000);
+    } catch (e) { return 0; }
+  }
+  function zoneInfo() {
+    const now = new Date(), y = now.getFullYear();
+    const jan = new Date(Date.UTC(y, 0, 15)), jul = new Date(Date.UTC(y, 6, 15));
+    return ZONES.map(z => {
+      const o = zoneOffsetMin(z.tz, now), oJan = zoneOffsetMin(z.tz, jan), oJul = zoneOffsetMin(z.tz, jul);
+      return { ...z, off: o, isDST: oJan !== oJul && o === Math.max(oJan, oJul) };
+    });
+  }
+
+  // ---- sticky state: minutes-of-day in the Pacific column; never follows the current time ----
+  const DEFAULT_PMINS = 13 * 60;   // first launch: 1:00 PM PDT (so 4:00 PM EDT)
+  let pmins = DEFAULT_PMINS;
+  try {
+    const s = JSON.parse(localStorage.getItem('tzconvert') || '{}');
+    if (Number.isInteger(s.pmins) && s.pmins >= 0 && s.pmins < 1440) pmins = s.pmins;
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem('tzconvert', JSON.stringify({ pmins })); } catch (e) {} };
+
+  let fmt24 = false, info = zoneInfo(), rel = info.map(z => z.off - info[0].off);
+  let activeIdx = -1, cells = [], commitT = null;
+  const zoneMins = i => mod(pmins + rel[i]);
+  const setZoneMins = (i, m) => { pmins = mod(m - rel[i]); save(); };
+
+  function fmtTime(m) {
+    const h = Math.floor(m / 60), mm = String(m % 60).padStart(2, '0');
+    if (fmt24) return String(h).padStart(2, '0') + ':' + mm;
+    return (((h + 11) % 12) + 1) + ':' + mm + ' ' + (h < 12 ? 'AM' : 'PM');
+  }
+
+  // Accepts "2", "2p", "230", "1430", "2:30", "2.30", "2:30 pm". In 12-hour mode with no
+  // AM/PM given, keeps the column's current meridiem (curPM) so "4:30" stays afternoon.
+  function parseTime(str, curPM) {
+    let s = String(str).trim().toLowerCase().replace(/\./g, ':');
+    let mer = null;
+    const mm = s.match(/([ap])\.?m?\.?\s*$/);
+    if (mm) { mer = mm[1]; s = s.slice(0, mm.index); }
+    s = s.replace(/[^0-9:]/g, '');
+    if (!s) return null;
+    let h, min;
+    if (s.includes(':')) {
+      const parts = s.split(':');
+      h = parseInt(parts[0], 10); min = parts[1] === '' ? 0 : parseInt(parts[1], 10);
+    } else if (s.length <= 2) { h = parseInt(s, 10); min = 0; }
+    else { h = parseInt(s.slice(0, s.length - 2), 10); min = parseInt(s.slice(-2), 10); }
+    if (!Number.isInteger(h) || !Number.isInteger(min) || min > 59 || h > 24) return null;
+    if (h === 24) h = 0;
+    if (mer) h = (h % 12) + (mer === 'p' ? 12 : 0);
+    else if (!fmt24 && h <= 12) { if (h === 12) h = curPM ? 12 : 0; else if (curPM) h += 12; }
+    if (h > 23) return null;
+    return h * 60 + min;
+  }
+
+  function paint(exceptIdx) {
+    cells.forEach((c, i) => {
+      if (i === exceptIdx) return;
+      c.input.value = fmtTime(zoneMins(i)); c.input.classList.remove('bad');
+    });
+  }
+
+  // Off the :00/:30 grid (typed odd time): the first tap just snaps to the grid in the
+  // tap's direction — that snap is the whole tap.
+  function step(i, delta) {
+    let m = zoneMins(i);
+    const r = m % 30;
+    if (r !== 0) m = delta > 0 ? m + (30 - r) : m - r;
+    else m += delta;
+    setZoneMins(i, mod(m)); paint(-1);
+  }
+
+  function commit(i, { canon = false } = {}) {
+    clearTimeout(commitT); commitT = null;
+    const c = cells[i];
+    const m = parseTime(c.input.value, Math.floor(zoneMins(i) / 60) >= 12);
+    if (m === null) { c.input.classList.add('bad'); return; }
+    setZoneMins(i, m);
+    paint(canon ? -1 : i);
+    if (canon) c.input.classList.remove('bad');
+  }
+
+  function setActive(i) {
+    activeIdx = i;
+    cells.forEach((c, j) => c.cell.classList.toggle('active', j === i));
+  }
+
+  function render() {
+    const O = readOpts();
+    fmt24 = O.format === '24';
+    document.body.classList.toggle('light', O._dark === '0');
+    const accent = /^#[0-9a-fA-F]{6}$/.test(O._accent || '') ? O._accent : (ACCENT_NAMES[O.color] || null);
+    if (accent) document.documentElement.style.setProperty('--accent', accent);
+
+    info = zoneInfo(); rel = info.map(z => z.off - info[0].off);
+    grid.innerHTML = ''; cells = [];
+    info.forEach((z, i) => {
+      const cell = document.createElement('div'); cell.className = 'cell';
+      if (i === info.length - 1) cell.classList.add('edge');
+      const ab = document.createElement('div'); ab.className = 'abbrs';
+      const dt = document.createElement('span'); dt.textContent = z.dt;
+      const st = document.createElement('span'); st.textContent = z.st;
+      (z.isDST ? dt : st).classList.add('on');
+      ab.appendChild(dt); ab.appendChild(document.createTextNode('/')); ab.appendChild(st);
+      const input = document.createElement('input');
+      input.className = 'time'; input.type = 'text'; input.inputMode = 'none';
+      input.autocomplete = 'off'; input.spellcheck = false; input.enterKeyHint = 'done';
+      const steps = document.createElement('div'); steps.className = 'steps';
+      [['−1h', -60], ['−30m', -30], ['+30m', 30], ['+1h', 60]].forEach(([lab, d]) => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = lab;
+        b.addEventListener('pointerdown', e => e.preventDefault());   // keep focus off the button (no input blur)
+        b.addEventListener('click', () => { setActive(i); step(i, d); });
+        steps.appendChild(b);
+      });
+      cell.appendChild(ab); cell.appendChild(input); cell.appendChild(steps);
+      grid.appendChild(cell);
+      cells.push({ cell, input });
+
+      input.addEventListener('focus', () => { setActive(i); input.select(); });
+      input.addEventListener('input', () => {
+        clearTimeout(commitT); commitT = setTimeout(() => commit(i), 250);
+      });
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(i, { canon: true }); });
+      input.addEventListener('blur', () => {
+        if (commitT) commit(i);
+        cells[i].input.value = fmtTime(zoneMins(i)); cells[i].input.classList.remove('bad');
+      });
+    });
+    if (activeIdx >= 0) setActive(activeIdx);
+    paint(-1);
+  }
+
+  // Wheel = ±30m on the column under the pointer (or the active one). Also covers the knob
+  // when its turn mode is "scroll" — the host forwards real wheel events to the page.
+  window.addEventListener('wheel', e => {
+    let i = cells.findIndex(c => c.cell.contains(e.target));
+    if (i < 0) i = activeIdx;
+    if (i < 0) return;
+    e.preventDefault();
+    step(i, e.deltaY < 0 ? 30 : -30);
+  }, { passive: false });
+
+  render();
+  window.addEventListener('hashchange', render);
+</script>
+</body>
+</html>

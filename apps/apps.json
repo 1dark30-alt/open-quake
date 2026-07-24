@@ -3097,6 +3097,29 @@
     ]
   },
   {
+    "id": "tzconvert",
+    "name": "Time Zone Converter",
+    "file": "tzconvert.html",
+    "options": [
+      {
+        "key": "format",
+        "label": "Time format",
+        "type": "select",
+        "default": "12",
+        "choices": [
+          [
+            "12",
+            "12-hour"
+          ],
+          [
+            "24",
+            "24-hour"
+          ]
+        ]
+      }
+    ]
+  },
+  {
     "id": "haschedule",
     "name": "HA Schedule",
     "file": "haschedule.html",
