@@ -331,16 +331,19 @@
 
   // ---- per-page global shortcut ----
   function shortcutRowHtml(g) {
-    return `<div class="row" style="margin-top:6px"><label style="width:auto">Shortcut</label>
+    return `<div class="row" style="margin-top:6px"><label style="width:auto">Hotkey shortcut</label>
       <input id="gShortcut" readonly placeholder="click, then press keys" value="${esc(g.shortcut || '')}" style="width:200px">
-      <button id="gShortcutClear" style="margin-left:8px">Clear</button></div>
-      <p class="hint">Global hotkey that jumps the panel to this page from anywhere. Click the box and press a combo that includes a modifier (e.g. Ctrl+Alt+1). If another app already owns that combo, it just won't fire.</p>`;
+      <button id="gShortcutClear" style="margin-left:8px">Clear</button>
+      <label style="width:auto;margin-left:14px;font-weight:normal;cursor:pointer"><input type="checkbox" id="gShortcutNoRot" ${g.shortcutStopsRotation ? 'checked' : ''}> Disables rotation</label></div>
+      <p class="hint">Global hotkey that jumps the panel to this page from anywhere. Click the box and press a combo that includes a modifier (e.g. Ctrl+Alt+1). If another app already owns that combo, it just won't fire. <b>Disables rotation</b> turns auto-rotation off when the hotkey fires, so the panel stays on this page until you start rotation again (knob, tray, or panel).</p>`;
   }
   function wireShortcutRow(g) {
     const inp = document.getElementById('gShortcut'); if (!inp) return;
     inp.onkeydown = e => { e.preventDefault(); const acc = accelFromEvent(e); if (acc) { g.shortcut = acc; inp.value = acc; renderGrids(); markDirty(); } };
     const clr = document.getElementById('gShortcutClear');
     if (clr) clr.onclick = () => { delete g.shortcut; inp.value = ''; renderGrids(); markDirty(); };
+    const nr = document.getElementById('gShortcutNoRot');
+    if (nr) nr.onchange = e => { if (e.target.checked) g.shortcutStopsRotation = true; else delete g.shortcutStopsRotation; markDirty(); };
   }
   // Build an Electron accelerator from a keydown. Requires a modifier (so we never bind a bare global key).
   function accelFromEvent(e) {
@@ -624,7 +627,7 @@
       const name = document.createElement('span'); name.textContent = `${tag} ${g.name || '(unnamed)'}`; name.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' + (g.hidden ? ';opacity:.55;font-style:italic' : '');
       left.appendChild(grip); left.appendChild(name); d.appendChild(left);
       if (g.hidden) { const b = document.createElement('span'); b.className = 'badge'; b.title = 'Hidden from page menu, knob cycling, and rotation'; b.textContent = '🚫👁'; d.appendChild(b); }
-      if (g.shortcut) { const b = document.createElement('span'); b.className = 'badge'; b.title = 'Shortcut'; b.textContent = g.shortcut; d.appendChild(b); }
+      if (g.shortcut) { const b = document.createElement('span'); b.className = 'badge'; b.title = 'Hotkey shortcut'; b.textContent = g.shortcut; d.appendChild(b); }
       d.onclick = () => { view = 'pages'; gi = i; ti = -1; selEnd = -1; render(); };
       d.draggable = true;
       d.ondragstart = e => { pageDragFrom = i; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch (er) {} };

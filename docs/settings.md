@@ -15,6 +15,11 @@ the knob does in monitor mode):
   apps); then tick **Include in rotation** on each page you want in the loop (a page rotates
   only when both its category and its own box are checked). Start or pause it any time from
   the knob's page selector (double-click) or the tray menu.
+- **Hotkey shortcut** (per page, in that page's settings) — a global combo that jumps the
+  panel to the page from anywhere, even when open-quake isn't focused. Tick **Disables
+  rotation** next to it and firing the hotkey also turns auto-rotation off, so the panel
+  stays put on that page until you start rotation again (knob, tray, or panel) — handy for
+  a page you jump to when you need it to stay on screen.
 - **Desktop focus** — auto-switch the panel to a page when a chosen desktop app becomes
   the focused window on the PC. Turn on **Auto-follow**, then add one or more **Focus
   trigger app(s)** to any page's **Advanced settings** (type a process name, or pick one

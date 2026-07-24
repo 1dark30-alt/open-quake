@@ -1211,7 +1211,10 @@ function applyShortcuts() {
         // immediately, not after async window/IPC churn. See modifiersInAccelerator above.
         if (process.platform === 'win32') modifiersInAccelerator(g.shortcut).forEach(m => mediaKeys.keyUp(m));
         gotoGrid(g.id, true);
-        if (rotateRunning) scheduleRotation();
+        // "Disables rotation": same path as the knob/tray toggle, so tray + panel state update
+        // and rotation stays off until the user starts it again.
+        if (g.shortcutStopsRotation) setRotation(false);
+        else if (rotateRunning) scheduleRotation();
       });
       if (!ok) console.log('shortcut already in use, not registered:', g.shortcut, '->', g.id);
     } catch (e) { console.log('shortcut register error:', g.shortcut, '-', e.message); }
