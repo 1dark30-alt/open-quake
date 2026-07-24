@@ -2,6 +2,29 @@
 // open-quake launcher: multi-grid panel + PC config editor. Talks to either the DK-QUAKE /
 // ARIS-68 panel (via Aris68Connector) or the open Bedrock RP2040 knob (via BedrockConnector),
 // routed through MultiKnob which picks whichever device is plugged in.
+
+// Node bundles its own CA list (Mozilla's) and never consults the OS trust store — so on a
+// corporate network doing TLS inspection (a re-signed cert chained to a private root the OS
+// already trusts), plain Node/`ws` connections (the HA client below) fail with "unable to get
+// local issuer certificate" even though the same cert is trusted fine in Chromium-rendered
+// pages. win-ca injects whatever Windows already trusts into Node's global TLS trust at
+// startup — do this before any module below can open a connection. macOS/Linux untouched
+// (Node's default CA list is normally sufficient there); failure here is non-fatal — connections
+// just fall back to Node's default behavior, matching how they worked before this existed.
+//
+// MUST use inject:'+' (not the bare `require('win-ca')` auto-run, which defaults to inject:true).
+// inject:true only sets https.globalAgent.options.ca — it covers plain `https` calls but NOT the
+// `ws` library's WebSocket connections, which build their own TLS socket via tls.createSecureContext
+// directly. inject:'+' patches tls.createSecureContext itself, so it's picked up by every TLS
+// connection regardless of which higher-level module opened it. fallback:true skips the native
+// N-API cert reader in favor of shelling out — consistent with this app's existing preference for
+// PowerShell-backed helpers (dpapi.js, desktopFocus.js) over native binaries, which corporate EDR
+// products are more prone to flag.
+if (process.platform === 'win32') {
+  try { require('win-ca/api')({ inject: '+', fallback: true }); }
+  catch (e) { console.log('win-ca load failed:', e.message); }
+}
+
 const { app, BrowserWindow, Tray, Menu, nativeImage, screen, powerSaveBlocker, ipcMain, shell, dialog, session, net, safeStorage, clipboard, globalShortcut, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -1188,7 +1211,10 @@ function applyShortcuts() {
         // immediately, not after async window/IPC churn. See modifiersInAccelerator above.
         if (process.platform === 'win32') modifiersInAccelerator(g.shortcut).forEach(m => mediaKeys.keyUp(m));
         gotoGrid(g.id, true);
-        if (rotateRunning) scheduleRotation();
+        // "Disables rotation": same path as the knob/tray toggle, so tray + panel state update
+        // and rotation stays off until the user starts it again.
+        if (g.shortcutStopsRotation) setRotation(false);
+        else if (rotateRunning) scheduleRotation();
       });
       if (!ok) console.log('shortcut already in use, not registered:', g.shortcut, '->', g.id);
     } catch (e) { console.log('shortcut register error:', g.shortcut, '-', e.message); }
