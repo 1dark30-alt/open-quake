@@ -37,16 +37,67 @@ abbreviation bold (per today's DST rules) and an editable time under each.
 
 ## Decisions (signed off 2026-07-23)
 
-- **Touch UI**: per-column steppers (option 1 of the discussed alternatives).
-  Tap a column's time to activate it; big `−1h −30m +30m +1h` buttons appear under
-  it. If the value is off the half-hour grid (from a typed odd time), the first
-  tap snaps to the grid in the tap's direction — that snap is the whole tap.
-- **Wheel freebie**: a wheel listener nudges a column ±30 m (hovered column, else
-  the active one) — covers desktop scroll wheels and the knob when its turn mode
-  is "scroll" (the host forwards wheel events to the page in that mode).
+- **Touch UI, v1 (superseded)**: per-column steppers (`−1h −30m +30m +1h` buttons).
+  Replaced 2026-07-24 — see below.
+- **Touch UI, v2 (current)**: an Apple-style inline drum picker, shown under the
+  active column in the space the steppers used (not an overlay — the other three
+  columns stay visible and update live as a drum settles). Three wheels in
+  12-hour mode (hour 1–12 / minute / AM·PM), two in 24-hour mode (hour 0–23 /
+  minute). Minute wheel stops are **00/15/30/45** — a plain :00/:30 drum barely
+  spins and can't reach quarter-hours. Native touch-drag scroll + CSS
+  `scroll-snap`; a desktop mouse wheel over a drum spins it directly.
+  - **Commit gating**: a drum only commits its column on a genuine user
+    gesture (`pointerdown`, `wheel`, or a tap on a drum item) — never on the
+    picker's own display sync. This mattered because the picker can only show
+    quarter-hour stops, but stored state can hold an arbitrary typed minute
+    (e.g. 4:37); after every commit the OTHER (unedited) columns' drums must
+    re-sync their display to the *nearest* quarter-hour for that exact state,
+    and that re-sync is a real `scrollTop` write that fires the same 'scroll'/
+    'scrollend' events a user drag does. Gating strictly on gesture — not on a
+    timing/rAF-based "was this programmatic" guess — is what prevents that
+    display-only sync from silently rounding an exact typed time a moment
+    later. Verified: typing `4:37` and leaving it alone keeps `4:37` forever;
+    only an actual touch/drag/tap on that drum ever changes it.
+  - Typed entry, Enter-to-commit, and the 250 ms debounce are unchanged.
+  - **Drag is hand-rolled, not native scroll** (fixed 2026-07-24). The panel's
+    physical touch never reaches the page as touch/pointer events — the host
+    translates raw touch points into synthetic `mouseDown`/`mouseMove`/`mouseUp`
+    on the webview (`index.js` `webTouch()`). A plain `overflow:auto` box does
+    not scroll from a mouse drag (that's native-touch-only behavior), so the
+    drums track the drag themselves and snap on release. Tap-to-jump likewise
+    hit-tests the release point rather than relying on a `click` event, since a
+    synthesized mouseDown/mouseUp pair isn't guaranteed to produce one.
+  - **Layout rules the picker must obey** (fixed 2026-07-24, all three from
+    on-device feedback):
+    1. Inactive columns use `display:none` for the picker, never
+       `visibility:hidden` — a hidden-but-laid-out picker still reserves its
+       full height in every column, which pushed their label + time above
+       centre. All four columns now sit at exact vertical centre when idle.
+    2. The active column hides its own time text entirely; the drum *is* the
+       readout, so a second copy of the same value is redundant (it had been
+       shrunk to a tiny bar, which read as clutter).
+    3. Three drum rows plus DONE must fit inside the 480 px cell
+       (`--ih:22vh` → 66vh of drum, ~80vh total). Oversizing overflowed the
+       cell, clipped the top/bottom rows, and knocked every column off centre.
+    Selected-row digits are `min(17vh,4.2vw)` — deliberately equal to the plain
+    time text that opens the picker, never smaller.
+  - **Dismissal** (added 2026-07-24): changes apply live as each drum settles,
+    so nothing needs saving — but the picker must be closeable, or the column
+    is stuck in edit mode. Four ways out, all landing on the same `deactivate()`:
+    a full-width **DONE** button under the drums (bound on `mousedown`, for the
+    same synthetic-touch reason as above), a tap anywhere outside the open
+    picker, **Escape**, and **Enter**.
+  - **Typing still works while the picker is open**: a printable key closes the
+    picker, focuses that column's text box, and seeds it with the keystroke, so
+    the existing debounce + Enter path takes over. The drum never blocks typed
+    entry.
+- **Wheel over a column (not over a drum)**: still nudges that column ±30 m —
+  covers desktop scroll wheels and the knob when its turn mode is "scroll".
 - **Typed entry**: kept for desktop use; `inputmode="none"` suppresses any OS
   touch keyboard on the panel while hardware keyboards still work.
-- Minutes granularity (no seconds). 12-hour default; 12/24 option for our
+- Minutes stored to the exact minute (no seconds); the picker only ever
+  *displays* the nearest quarter-hour for a value it can't represent, it never
+  rewrites the stored value on its own. 12-hour default; 12/24 option for our
   European brothers (rendered in the app's normal options list — the editor's
   collapsible "Advanced" section is host-owned and not available to app options).
-- Rejected alternatives: shared timeline scrubber, drum pickers, on-screen keypad.
+- Rejected alternatives: shared timeline scrubber, on-screen keypad, steppers (v1).

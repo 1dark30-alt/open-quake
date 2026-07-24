@@ -19,9 +19,10 @@ Included apps:
   light/dark theme and accent.
 - **Time Zone Converter** — for "can you meet at 4:30 my time?": the four US zones side
   by side (PDT/PST … EDT/EST, the currently-active abbreviation bold), with an editable
-  time under each. Set any zone's time — tap steppers (−1h/−30m/+30m/+1h) or type — and
-  the other three update automatically. Sticky: keeps the last-set times across restarts
-  and never snaps to the current time (that's the World Clock's job). 12/24-hour option.
+  time under each. Set any zone's time — spin the inline drum picker (Apple-style
+  hour/minute/AM-PM wheels), type, or scroll — and the other three update automatically.
+  Sticky: keeps the last-set times across restarts and never snaps to the current time
+  (that's the World Clock's job). 12/24-hour option.
 - **[Music controller](music.md)** — now-playing + transport + a programmable app grid.
 - **[Open WebUI chat + voice](ai-chat.md)** — talk to your own LLM, with knob push-to-talk.
 - **[Meeting](meeting.md)** — one-tap mute/video/accept/decline/leave for Zoom and Teams,

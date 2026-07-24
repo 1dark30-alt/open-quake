@@ -5,39 +5,63 @@
 <meta name="viewport" content="width=1920, height=480">
 <title>Time Zone Converter</title>
 <style>
-  :root { --bg:#05080d; --fg:#e8f0f6; --label:#8aa6b4; --face:#0d1722; --tick:#3a4a5a; --accent:#2bff88; }
+  :root { --bg:#05080d; --fg:#e8f0f6; --label:#8aa6b4; --face:#0d1722; --tick:#3a4a5a; --accent:#2bff88;
+    --ih:9.5vh; }
   body.light { --bg:#eef3f8; --fg:#16242f; --label:#5a6c7e; --face:#ffffff; --tick:#b9c6d2; }
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { width:100%; height:100%; overflow:hidden; background:var(--bg);
     font-family:'Segoe UI', system-ui, -apple-system, sans-serif; }
   #grid { width:100vw; height:100vh; display:grid; grid-template-columns:repeat(4,1fr); }
   .cell { display:flex; flex-direction:column; align-items:center; justify-content:center;
-    position:relative; padding:0 12px; min-width:0; gap:2.4vh; }
+    position:relative; padding:0 12px; min-width:0; gap:1.8vh; }
   .cell::after { content:''; position:absolute; right:0; top:18%; height:64%; width:1px;
     background:linear-gradient(transparent, color-mix(in srgb, var(--fg) 16%, transparent), transparent); }
   .cell.edge::after { display:none; }
   .abbrs { color:var(--label); font-weight:600; letter-spacing:.12em; white-space:nowrap;
     font-size:min(9vh, 2.2vw); }
   .abbrs .on { color:var(--fg); font-weight:800; }
+  .cell.active .abbrs { display:none; }   /* reclaim vertical space for the picker while adjusting */
   .time { width:100%; text-align:center; color:var(--accent); font-weight:700;
-    font-size:min(21vh, 4.4vw); line-height:1.1; letter-spacing:.02em;
+    font-size:min(19vh, 4.2vw); line-height:1.1; letter-spacing:.02em;
     font-variant-numeric:tabular-nums; white-space:nowrap;
     background:none; border:none; outline:none; border-radius:.18em;
     font-family:inherit; caret-color:var(--fg);
     text-shadow:0 0 .26em color-mix(in srgb, var(--accent) 55%, transparent); }
-  .cell.active .time { background:color-mix(in srgb, var(--accent) 9%, transparent);
-    box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+  /* While adjusting, the drum IS the readout — a second copy of the same time would be redundant. */
+  .cell.active .time { display:none; }
   .time.bad { color:#ff5a5a; text-shadow:0 0 .26em color-mix(in srgb, #ff5a5a 55%, transparent); }
-  .steps { display:flex; gap:1.6vh; visibility:hidden; }
-  .cell.active .steps { visibility:visible; }
-  .steps button { min-width:11vh; min-height:10vh; padding:.6vh 1.6vh;
-    font:inherit; font-size:min(6.5vh, 1.5vw); font-weight:700; color:var(--fg);
-    background:color-mix(in srgb, var(--fg) 8%, transparent);
-    border:1px solid color-mix(in srgb, var(--fg) 22%, transparent);
-    border-radius:1.8vh; cursor:pointer; touch-action:manipulation; user-select:none;
-    font-variant-numeric:tabular-nums; }
-  .steps button:active { background:color-mix(in srgb, var(--accent) 22%, transparent);
-    border-color:color-mix(in srgb, var(--accent) 55%, transparent); }
+  /* ---- Apple-style inline drum picker (shown for the active column) ---- */
+  /* 3 rows + Done must fit inside the 480px-tall cell, or the cell overflows and every column's
+     content gets shoved off-center. 3*22vh = 66vh drum + gap + Done ~= 80vh. */
+  .cell.active { --ih:22vh; }
+  /* display:none, NOT visibility:hidden — a hidden-but-laid-out picker still reserves its full
+     height in every inactive column, which is what pushed their label+time above center. */
+  .picker { position:relative; display:none; gap:.6vw; touch-action:none; }
+  .cell.active .picker { display:flex; }
+  .done { display:none; align-items:center; justify-content:center;
+    min-height:11vh; padding:0 3.4vw; font:inherit; font-size:min(5.4vh, 1.4vw);
+    font-weight:700; letter-spacing:.06em; color:var(--bg); background:var(--accent);
+    border:none; border-radius:1.4vh; cursor:pointer; user-select:none;
+    touch-action:manipulation; white-space:nowrap; }
+  .cell.active .done { display:flex; }
+  .done:active { filter:brightness(.85); }
+  .picker::before { content:''; position:absolute; left:-.6vw; right:-.6vw;
+    top:calc(50% - var(--ih)/2); height:var(--ih); pointer-events:none; border-radius:1.6vh;
+    background:color-mix(in srgb, var(--accent) 10%, transparent);
+    box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .drum { height:calc(3*var(--ih)); overflow-y:auto; scroll-snap-type:y mandatory;
+    scrollbar-width:none; text-align:center; overscroll-behavior:contain; cursor:grab;
+    -webkit-mask-image:linear-gradient(transparent, #000 26%, #000 74%, transparent);
+    mask-image:linear-gradient(transparent, #000 26%, #000 74%, transparent); }
+  .drum:active { cursor:grabbing; }
+  .drum::-webkit-scrollbar { display:none; }
+  .dpad { height:var(--ih); }
+  .di { height:var(--ih); line-height:var(--ih); scroll-snap-align:center;
+    color:var(--label); font-weight:600; font-size:min(12vh, 3vw);
+    padding:0 .4vw; font-variant-numeric:tabular-nums; user-select:none; cursor:pointer;
+    white-space:nowrap; }
+  /* matches the plain time text (min(19vh,4.2vw)) that opens the picker, per spec — never smaller */
+  .di.sel { color:var(--fg); font-weight:800; font-size:min(17vh, 4.2vw); }
 </style>
 </head>
 <body>
@@ -59,6 +83,7 @@
     { tz: 'US/Central',  dt: 'CDT', st: 'CST' },
     { tz: 'US/Eastern',  dt: 'EDT', st: 'EST' }
   ];
+  const MIN_STOPS = [0, 15, 30, 45];
   const grid = document.getElementById('grid');
   const mod = m => ((m % 1440) + 1440) % 1440;
 
@@ -129,16 +154,97 @@
       if (i === exceptIdx) return;
       c.input.value = fmtTime(zoneMins(i)); c.input.classList.remove('bad');
     });
+    if (activeIdx >= 0) syncPicker(activeIdx);
   }
 
-  // Off the :00/:30 grid (typed odd time): the first tap just snaps to the grid in the
-  // tap's direction — that snap is the whole tap.
-  function step(i, delta) {
-    let m = zoneMins(i);
-    const r = m % 30;
-    if (r !== 0) m = delta > 0 ? m + (30 - r) : m - r;
-    else m += delta;
-    setZoneMins(i, mod(m)); paint(-1);
+  // ---- drum picker ----
+  // The panel's physical touch doesn't reach the page as real touch/pointer events — the host
+  // translates raw touch points into synthetic mouseDown/mouseMove/mouseUp on the webview (see
+  // index.js webTouch()). A plain overflow:auto div does NOT scroll from mouse-drag on its own
+  // (that's native-touch-only browser behavior), so dragging is hand-rolled here from those mouse
+  // events. This also covers a real desktop mouse identically, so no browser-only shortcut exists.
+  function makeDrum(values, onSettle) {
+    const d = document.createElement('div'); d.className = 'drum';
+    const padT = document.createElement('div'); padT.className = 'dpad'; d.appendChild(padT);
+    const items = values.map(v => {
+      const it = document.createElement('div'); it.className = 'di'; it.textContent = v;
+      d.appendChild(it); return it;
+    });
+    const padB = document.createElement('div'); padB.className = 'dpad'; d.appendChild(padB);
+    const itemH = () => items[0].offsetHeight || 1;
+    const idx = () => Math.max(0, Math.min(items.length - 1, Math.round(d.scrollTop / itemH())));
+    const highlight = () => { const k = idx(); items.forEach((it, j) => it.classList.toggle('sel', j === k)); };
+    let dragging = false, dragMoved = false, startY = 0, startScroll = 0;
+    let t = null, userGesture = false;
+    // userGesture is set true only by an actual drag/wheel/tap on this drum, so a scroll event
+    // only commits when a real interaction caused it — never when syncPicker's setIdx moves the
+    // drum to display an exact state's nearest quarter-hour stop (that must never itself commit
+    // and silently round the real, possibly off-grid, time).
+    const settle = () => { clearTimeout(t); t = null; highlight(); if (userGesture) { userGesture = false; onSettle(); } };
+
+    let lastX = 0;
+    function onMove(e) {
+      if (!dragging) return;
+      const dy = e.clientY - startY;
+      if (Math.abs(dy) > 2) dragMoved = true;
+      d.scrollTop = startScroll - dy;
+      highlight();
+    }
+    // Tap-to-jump lives here (not in a 'click' listener) — the host delivers panel touch as
+    // synthetic mouseDown/mouseUp via webview.sendInputEvent, and whether that reliably
+    // auto-synthesizes a following native 'click' isn't something to depend on; hit-testing the
+    // release point ourselves works regardless of whether it does.
+    function onUp(e) {
+      if (!dragging) return;
+      dragging = false;
+      if (dragMoved) {
+        d.scrollTop = idx() * itemH();   // explicit snap — a JS-driven scroll can't rely on CSS scroll-snap
+        highlight();
+        userGesture = false;             // consume now so the resulting native 'scroll' event below is a no-op
+        onSettle();
+        return;
+      }
+      const y = e ? e.clientY : null;
+      const el = y != null && document.elementFromPoint ? document.elementFromPoint(lastX, y) : null;
+      const j = el ? items.indexOf(el) : -1;
+      if (j >= 0) { d.scrollTop = j * itemH(); highlight(); userGesture = false; onSettle(); }
+    }
+    d.addEventListener('mousedown', e => {
+      dragging = true; dragMoved = false; userGesture = true;
+      startY = e.clientY; lastX = e.clientX; startScroll = d.scrollTop;
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    // Real touch devices and a genuine desktop mouse wheel get native scrolling for free (harmless
+    // alongside the hand-rolled drag above); still gate their commits on a real user gesture.
+    d.addEventListener('pointerdown', () => { userGesture = true; });
+    d.addEventListener('wheel', () => { userGesture = true; });
+    d.addEventListener('scroll', () => { if (dragging) return; highlight(); if (!userGesture) return; clearTimeout(t); t = setTimeout(settle, 140); });
+    d.addEventListener('scrollend', () => { if (dragging || !userGesture) return; settle(); });
+    return { el: d, idx, highlight, setIdx: k => { d.scrollTop = k * itemH(); highlight(); } };
+  }
+
+  // Read the active drums -> minutes; commit only if it actually changed (programmatic syncs
+  // settle on the same value and become no-ops, so sync/commit can't loop).
+  function commitFromPicker(i) {
+    const c = cells[i];
+    if (!c.drums) return;
+    let h;
+    if (fmt24) h = c.drums.hour.idx();
+    else { h = (c.drums.hour.idx() + 1) % 12 + (c.drums.ap.idx() === 1 ? 12 : 0); }
+    const m = h * 60 + MIN_STOPS[c.drums.min.idx()];
+    if (m === zoneMins(i)) return;
+    setZoneMins(i, m); paint(-1);
+  }
+
+  function syncPicker(i) {
+    const c = cells[i];
+    if (!c.drums) return;
+    const m = zoneMins(i), h = Math.floor(m / 60);
+    c.drums.hour.setIdx(fmt24 ? h : (h + 11) % 12);
+    c.drums.min.setIdx(Math.max(0, Math.min(3, Math.round((m % 60) / 15))));
+    if (c.drums.ap) c.drums.ap.setIdx(h >= 12 ? 1 : 0);
   }
 
   function commit(i, { canon = false } = {}) {
@@ -151,9 +257,27 @@
     if (canon) c.input.classList.remove('bad');
   }
 
+  // suppressPicker lets the keyboard fallback focus an input WITHOUT reopening the picker.
+  let suppressPicker = false;
+
   function setActive(i) {
     activeIdx = i;
     cells.forEach((c, j) => c.cell.classList.toggle('active', j === i));
+    syncPicker(i);
+  }
+
+  // Close the picker. Every drum change has already been applied live, so this only dismisses —
+  // there is nothing left to "save". The column goes back to showing its (centered) label + time.
+  function deactivate() {
+    if (activeIdx < 0) return;
+    const i = activeIdx;
+    activeIdx = -1;
+    cells.forEach(c => c.cell.classList.remove('active'));
+    const inp = cells[i] && cells[i].input;
+    if (!inp) return;
+    if (commitT) commit(i);
+    inp.value = fmtTime(zoneMins(i)); inp.classList.remove('bad');
+    if (document.activeElement === inp) inp.blur();
   }
 
   function render() {
@@ -176,18 +300,26 @@
       const input = document.createElement('input');
       input.className = 'time'; input.type = 'text'; input.inputMode = 'none';
       input.autocomplete = 'off'; input.spellcheck = false; input.enterKeyHint = 'done';
-      const steps = document.createElement('div'); steps.className = 'steps';
-      [['−1h', -60], ['−30m', -30], ['+30m', 30], ['+1h', 60]].forEach(([lab, d]) => {
-        const b = document.createElement('button'); b.type = 'button'; b.textContent = lab;
-        b.addEventListener('pointerdown', e => e.preventDefault());   // keep focus off the button (no input blur)
-        b.addEventListener('click', () => { setActive(i); step(i, d); });
-        steps.appendChild(b);
-      });
-      cell.appendChild(ab); cell.appendChild(input); cell.appendChild(steps);
+      const picker = document.createElement('div'); picker.className = 'picker';
+      const onSettle = () => commitFromPicker(i);
+      const drums = {
+        hour: makeDrum(fmt24 ? Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'))
+                             : Array.from({ length: 12 }, (_, k) => String(k + 1)), onSettle),
+        min: makeDrum(MIN_STOPS.map(v => String(v).padStart(2, '0')), onSettle),
+        ap: fmt24 ? null : makeDrum(['AM', 'PM'], onSettle)
+      };
+      picker.appendChild(drums.hour.el); picker.appendChild(drums.min.el);
+      if (drums.ap) picker.appendChild(drums.ap.el);
+      const done = document.createElement('button');
+      done.type = 'button'; done.className = 'done'; done.textContent = 'DONE';
+      // mousedown, not click: panel touch arrives as synthetic mouseDown/mouseUp and a following
+      // native 'click' isn't guaranteed (same reason the drums hit-test their own release).
+      done.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); deactivate(); });
+      cell.appendChild(ab); cell.appendChild(input); cell.appendChild(picker); cell.appendChild(done);
       grid.appendChild(cell);
-      cells.push({ cell, input });
+      cells.push({ cell, input, drums });
 
-      input.addEventListener('focus', () => { setActive(i); input.select(); });
+      input.addEventListener('focus', () => { if (suppressPicker) return; setActive(i); input.select(); });
       input.addEventListener('input', () => {
         clearTimeout(commitT); commitT = setTimeout(() => commit(i), 250);
       });
@@ -201,15 +333,52 @@
     paint(-1);
   }
 
-  // Wheel = ±30m on the column under the pointer (or the active one). Also covers the knob
-  // when its turn mode is "scroll" — the host forwards real wheel events to the page.
+  // ±30m step used by the wheel shortcut; snaps to the half-hour grid first if off it.
+  function step(i, delta) {
+    let m = zoneMins(i);
+    const r = m % 30;
+    if (r !== 0) m = delta > 0 ? m + (30 - r) : m - r;
+    else m += delta;
+    setZoneMins(i, mod(m)); paint(-1);
+  }
+
+  // Wheel over a drum scrolls that drum natively; elsewhere it's a ±30m nudge on the column
+  // under the pointer (or the active one). Covers the knob when its turn mode is "scroll".
   window.addEventListener('wheel', e => {
+    if (e.target.closest && e.target.closest('.drum')) return;
     let i = cells.findIndex(c => c.cell.contains(e.target));
     if (i < 0) i = activeIdx;
     if (i < 0) return;
     e.preventDefault();
     step(i, e.deltaY < 0 ? 30 : -30);
   }, { passive: false });
+
+  // Tapping anywhere outside the open picker closes it (tapping another column's time then opens
+  // that one, via its focus handler). mousedown, because that's what panel touch delivers.
+  window.addEventListener('mousedown', e => {
+    if (activeIdx < 0) return;
+    const c = cells[activeIdx];
+    if (c && c.cell.contains(e.target)) return;
+    deactivate();
+  });
+
+  // Keyboard: Enter/Escape close the picker. Typing a digit (muscle memory, desktop only) closes
+  // the picker and routes the keystroke into that column's text box, where the existing 250 ms
+  // debounce + Enter-to-commit take over — so the drum never blocks typed entry.
+  window.addEventListener('keydown', e => {
+    if (activeIdx < 0) return;
+    if (e.key === 'Enter' || e.key === 'Escape') { deactivate(); e.preventDefault(); return; }
+    if (e.key.length !== 1 || !/[0-9apAP:]/.test(e.key)) return;
+    const i = activeIdx;
+    deactivate();
+    const inp = cells[i].input;
+    suppressPicker = true; inp.focus(); suppressPicker = false;
+    inp.value = e.key;
+    clearTimeout(commitT); commitT = setTimeout(() => commit(i), 250);
+    e.preventDefault();
+  });
+
+  window.addEventListener('resize', () => { if (activeIdx >= 0) syncPicker(activeIdx); });
 
   render();
   window.addEventListener('hashchange', render);
